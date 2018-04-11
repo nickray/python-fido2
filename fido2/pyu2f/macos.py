@@ -284,6 +284,7 @@ REMOVAL_CALLBACK = IO_HID_CALLBACK(hid_removal_callback)
 
 class HIDReadThread(threading.Thread):
     def __init__(self, hid_device):
+        super(HIDReadThread, self).__init__()
         self.hid_device = hid_device
 
     def run(self):
