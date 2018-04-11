@@ -290,13 +290,10 @@ def DeviceReadThread(hid_device):
                                        K_CF_RUNLOOP_DEFAULT_MODE)
 
   # Run the run loop
-  run_loop_run_result = K_CF_RUN_LOOP_RUN_TIMED_OUT
-  while (run_loop_run_result == K_CF_RUN_LOOP_RUN_TIMED_OUT
-         or run_loop_run_result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE):
-    run_loop_run_result = cf.CFRunLoopRunInMode(
-        K_CF_RUNLOOP_DEFAULT_MODE,
-        1000,  # Timeout in seconds
-        False)  # Return after source handled
+  run_loop_run_result = cf.CFRunLoopRunInMode(
+    K_CF_RUNLOOP_DEFAULT_MODE,
+    4,  # Timeout in seconds
+    True)  # Return after source handled
 
   # log any unexpected run loop exit
   if run_loop_run_result != K_CF_RUN_LOOP_RUN_STOPPED:
@@ -380,10 +377,6 @@ class MacOsHidDevice(base.HidDevice):
 
     # Create and start read thread
     self.run_loop_ref = None
-    self.read_thread = threading.Thread(target=DeviceReadThread,
-                                        args=(self,))
-    self.read_thread.daemon = True
-    self.read_thread.start()
 
     # Read max report sizes for in/out
     self.internal_max_in_report_len = GetDeviceIntProperty(
@@ -433,7 +426,11 @@ class MacOsHidDevice(base.HidDevice):
 
   def Read(self):
     """See base class."""
-    return self.read_queue.get(timeout=0xffffffff)
+    read_thread = threading.Thread(target=DeviceReadThread,
+                                   args=(self,))
+    read_thread.start()
+    read_thread.join()
+    return self.read_queue.get(False)
 
   def __del__(self):
     # Unregister the callback
@@ -441,11 +438,5 @@ class MacOsHidDevice(base.HidDevice):
         self.device_handle,
         self.in_report_buffer,
         self.internal_max_in_report_len,
-        None,
+        ctypes.cast(0, IO_HID_REPORT_CALLBACK),
         None)
-
-    # Stop the run loop
-    cf.CFRunLoopStop(self.run_loop_ref)
-
-    # Wait for the read thread to exit
-    self.read_thread.join()
