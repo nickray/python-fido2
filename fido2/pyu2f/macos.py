@@ -304,7 +304,7 @@ def DeviceReadThread(hid_device):
 
   iokit.IOHIDDeviceRegisterRemovalCallback(
       hid_device.device_handle, REMOVAL_CALLBACK,
-      ctypes.pyobject(hid_device.run_loop_ref))
+      ctypes.py_object(hid_device.run_loop_ref))
 
   # Run the run loop
   run_loop_run_result = cf.CFRunLoopRunInMode(
