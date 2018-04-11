@@ -96,6 +96,8 @@ IO_HID_REPORT_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
                                           ctypes.c_uint32,
                                           ctypes.POINTER(ctypes.c_uint8),
                                           CF_INDEX)
+IO_HID_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
+                                   ctypes.c_void_p)
 
 # Define C constants
 K_CF_NUMBER_SINT32_TYPE = 3
@@ -156,6 +158,9 @@ if sys.platform.startswith('darwin'):
                                                   CF_TYPE_REF]
   iokit.IOHIDDeviceGetProperty.restype = CF_TYPE_REF
   iokit.IOHIDDeviceGetProperty.argtypes = [IO_HID_DEVICE_REF, CF_STRING_REF]
+  iokit.IOHIDDeviceRegisterRemovalCallback.restype = None
+  iokit.IOHIDDeviceRegisterRemovalCallback.argtypes = [
+      IO_HID_DEVICE_REF, IO_HID_CALLBACK, ctypes.py_object]
   iokit.IOHIDDeviceRegisterInputReportCallback.restype = None
   iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
       IO_HID_DEVICE_REF, ctypes.POINTER(ctypes.c_uint8), CF_INDEX,
@@ -269,6 +274,14 @@ def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
 REGISTERED_READ_CALLBACK = IO_HID_REPORT_CALLBACK(HidReadCallback)
 
 
+def HidRemovalCallback(run_loop_ref, result, sender):
+  del result, sender
+  cf.CFRunLoopStop(run_loop_ref)
+
+
+REMOVAL_CALLBACK = IO_HID_CALLBACK(HidRemovalCallback)
+
+
 def DeviceReadThread(hid_device):
   """Binds a device to the thread's run loop, then starts the run loop.
 
@@ -288,6 +301,10 @@ def DeviceReadThread(hid_device):
   iokit.IOHIDDeviceScheduleWithRunLoop(hid_device.device_handle,
                                        hid_device.run_loop_ref,
                                        K_CF_RUNLOOP_DEFAULT_MODE)
+
+  iokit.IOHIDDeviceRegisterRemovalCallback(
+      hid_device.device_handle, REMOVAL_CALLBACK,
+      ctypes.pyobject(hid_device.run_loop_ref))
 
   # Run the run loop
   run_loop_run_result = cf.CFRunLoopRunInMode(
