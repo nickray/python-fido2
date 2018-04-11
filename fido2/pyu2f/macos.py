@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import ctypes
 import ctypes.util
 import logging
-from six.moves.queue import Queue
+from six.moves.queue import Queue, Empty
 import sys
 import threading
 
@@ -433,19 +433,27 @@ class MacOsHidDevice(base.HidDevice):
 
   def Read(self):
     """See base class."""
-    return self.read_queue.get(timeout=0xffffffff)
+    try:
+      return self.read_queue.get(timeout=4)
+    except Empty:
+      self._stop_reading()
+      raise TimeoutError('Device not responding')
+
+  def _stop_reading(self):
+    if self.read_thread.is_alive():
+      # Unregister the callback
+      iokit.IOHIDDeviceRegisterInputReportCallback(
+          self.device_handle,
+          self.in_report_buffer,
+          self.internal_max_in_report_len,
+          None,
+          None)
+
+      # Stop the run loop
+      cf.CFRunLoopStop(self.run_loop_ref)
+
+      # Wait for the read thread to exit
+      self.read_thread.join()
 
   def __del__(self):
-    # Unregister the callback
-    iokit.IOHIDDeviceRegisterInputReportCallback(
-        self.device_handle,
-        self.in_report_buffer,
-        self.internal_max_in_report_len,
-        None,
-        None)
-
-    # Stop the run loop
-    cf.CFRunLoopStop(self.run_loop_ref)
-
-    # Wait for the read thread to exit
-    self.read_thread.join()
+    self._stop_reading()
