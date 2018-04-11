@@ -312,8 +312,9 @@ class HIDReadThread(threading.Thread):
                or run_loop_run_result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE):
             run_loop_run_result = cf.CFRunLoopRunInMode(
                 K_CF_RUNLOOP_DEFAULT_MODE,
-                1000,  # Timeout in seconds
+                1,  # Timeout in seconds
                 False)  # Return after source handled
+            logger.debug('READ LOOP: {}'.format(self.hid_device))
 
         # log any unexpected run loop exit
         if run_loop_run_result != K_CF_RUN_LOOP_RUN_STOPPED:
