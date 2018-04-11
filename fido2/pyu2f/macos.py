@@ -274,9 +274,9 @@ def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
 REGISTERED_READ_CALLBACK = IO_HID_REPORT_CALLBACK(HidReadCallback)
 
 
-def HidRemovalCallback(run_loop_ref, result, sender):
+def HidRemovalCallback(hid_device, result, sender):
   del result, sender
-  cf.CFRunLoopStop(run_loop_ref)
+  cf.CFRunLoopStop(hid_device.run_loop_ref)
 
 
 REMOVAL_CALLBACK = IO_HID_CALLBACK(HidRemovalCallback)
@@ -304,7 +304,7 @@ def DeviceReadThread(hid_device):
 
   iokit.IOHIDDeviceRegisterRemovalCallback(
       hid_device.device_handle, REMOVAL_CALLBACK,
-      ctypes.py_object(hid_device.run_loop_ref))
+      ctypes.py_object(hid_device))
 
   # Run the run loop
   run_loop_run_result = cf.CFRunLoopRunInMode(
