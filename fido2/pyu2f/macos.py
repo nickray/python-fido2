@@ -96,6 +96,8 @@ IO_HID_REPORT_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
                                           ctypes.c_uint32,
                                           ctypes.POINTER(ctypes.c_uint8),
                                           CF_INDEX)
+IO_HID_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
+                                   ctypes.c_void_p)
 
 # Define C constants
 K_CF_NUMBER_SINT32_TYPE = 3
@@ -156,6 +158,9 @@ if sys.platform.startswith('darwin'):
                                                   CF_TYPE_REF]
   iokit.IOHIDDeviceGetProperty.restype = CF_TYPE_REF
   iokit.IOHIDDeviceGetProperty.argtypes = [IO_HID_DEVICE_REF, CF_STRING_REF]
+  iokit.IOHIDDeviceRegisterRemovalCallback.restype = None
+  iokit.IOHIDDeviceRegisterRemovalCallback.argtypes = [
+      IO_HID_DEVICE_REF, IO_HID_CALLBACK, ctypes.py_object]
   iokit.IOHIDDeviceRegisterInputReportCallback.restype = None
   iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
       IO_HID_DEVICE_REF, ctypes.POINTER(ctypes.c_uint8), CF_INDEX,
@@ -269,6 +274,55 @@ def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
 REGISTERED_READ_CALLBACK = IO_HID_REPORT_CALLBACK(HidReadCallback)
 
 
+def hid_removal_callback(thread, result, sender):
+    logger.debug('HID DEVICE REMOVED')
+    thread.running = False
+
+
+REMOVAL_CALLBACK = IO_HID_CALLBACK(hid_removal_callback)
+
+
+class HIDReadThread(threading.Thread):
+    def __init__(self, hid_device):
+        self.hid_device = hid_device
+
+    def run(self):
+        # Schedule device events with run loop
+        self.hid_device.run_loop_ref = cf.CFRunLoopGetCurrent()
+        if not self.hid_device.run_loop_ref:
+            logger.error('Failed to get current run loop')
+            return
+
+        iokit.IOHIDDeviceRegisterRemovalCallback(
+            self.hid_device.device_handle,
+            REMOVAL_CALLBACK,
+            ctypes.py_object(self)
+        )
+
+
+        iokit.IOHIDDeviceScheduleWithRunLoop(self.hid_device.device_handle,
+                                             self.hid_device.run_loop_ref,
+                                             K_CF_RUNLOOP_DEFAULT_MODE)
+
+        # Run the run loop
+        run_loop_run_result = K_CF_RUN_LOOP_RUN_TIMED_OUT
+        while self.running and (run_loop_run_result == K_CF_RUN_LOOP_RUN_TIMED_OUT
+               or run_loop_run_result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE):
+            run_loop_run_result = cf.CFRunLoopRunInMode(
+                K_CF_RUNLOOP_DEFAULT_MODE,
+                1000,  # Timeout in seconds
+                False)  # Return after source handled
+
+        # log any unexpected run loop exit
+        if run_loop_run_result != K_CF_RUN_LOOP_RUN_STOPPED:
+            logger.error('Unexpected run loop exit code: %d', run_loop_run_result)
+
+        # Unschedule from run loop
+        iokit.IOHIDDeviceUnscheduleFromRunLoop(self.hid_device.device_handle,
+                                               self.hid_device.run_loop_ref,
+                                               K_CF_RUNLOOP_DEFAULT_MODE)
+
+
 def DeviceReadThread(hid_device):
   """Binds a device to the thread's run loop, then starts the run loop.
 
@@ -380,8 +434,9 @@ class MacOsHidDevice(base.HidDevice):
 
     # Create and start read thread
     self.run_loop_ref = None
-    self.read_thread = threading.Thread(target=DeviceReadThread,
-                                        args=(self,))
+    self.read_thread = HIDReadThread(self)
+    #self.read_thread = threading.Thread(target=DeviceReadThread,
+    #                                    args=(self,))
     self.read_thread.daemon = True
     self.read_thread.start()
 
@@ -436,6 +491,7 @@ class MacOsHidDevice(base.HidDevice):
     try:
       return self.read_queue.get(timeout=4)
     except Empty:
+      logger.warn('READ QUEUE TIMEOUT, STOP READ THREAD!')
       self._stop_reading()
       raise TimeoutError('Device not responding')
 
@@ -446,7 +502,7 @@ class MacOsHidDevice(base.HidDevice):
           self.device_handle,
           self.in_report_buffer,
           self.internal_max_in_report_len,
-          None,
+          ctypes.cast(0, IO_HID_REPORT_CALLBACK),
           None)
 
       # Stop the run loop
