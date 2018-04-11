@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import ctypes
 import ctypes.util
 import logging
-from six.moves.queue import Queue
+from six.moves.queue import Queue, Empty
 import sys
 import threading
 
@@ -313,7 +313,7 @@ def DeviceReadThread(hid_device):
     True)  # Return after source handled
 
   # log any unexpected run loop exit
-  if run_loop_run_result != K_CF_RUN_LOOP_RUN_STOPPED:
+  if run_loop_run_result != K_CF_RUN_LOOP_RUN_HANDLED_SOURCE:
     logger.error('Unexpected run loop exit code: %d', run_loop_run_result)
 
   # Unschedule from run loop
@@ -447,7 +447,10 @@ class MacOsHidDevice(base.HidDevice):
                                    args=(self,))
     read_thread.start()
     read_thread.join()
-    return self.read_queue.get(False)
+    try:
+        return self.read_queue.get(False)
+    except Empty:
+        raise TimeoutError('Failed reading a response')
 
   def __del__(self):
     # Unregister the callback
