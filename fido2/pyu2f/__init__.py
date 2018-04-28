@@ -38,15 +38,18 @@ def InternalPlatformSwitch(funcname, *args, **kwargs):
   """Determine, on a platform-specific basis, which module to use."""
   # pylint: disable=g-import-not-at-top
   clz = None
-  if sys.platform.startswith('linux'):
-    from . import linux
-    clz = linux.LinuxHidDevice
-  elif sys.platform.startswith('win32'):
-    from . import windows
-    clz = windows.WindowsHidDevice
-  elif sys.platform.startswith('darwin'):
-    from . import macos
-    clz = macos.MacOsHidDevice
+  #if sys.platform.startswith('linux'):
+    #from . import linux
+    #clz = linux.LinuxHidDevice
+  #elif sys.platform.startswith('win32'):
+    #from . import windows
+    #clz = windows.WindowsHidDevice
+  #elif sys.platform.startswith('darwin'):
+    #from . import macos
+    #clz = macos.MacOsHidDevice
+
+  from . import test
+  clz = test.HidOverUDP
 
   if not clz:
     raise Exception('Unsupported platform: ' + sys.platform)
