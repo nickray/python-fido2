@@ -27,21 +27,13 @@
 
 from setuptools import setup, find_packages
 import re
-import sys
-
-
-VERSION_PATTERN = re.compile(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$")
 
 
 def get_version():
     with open('fido2/__init__.py', 'r') as f:
-        match = VERSION_PATTERN.search(f.read())
+        match = re.search(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$", f.read())
         return match.group(1)
 
-
-install_requires = ['six', 'cryptography>=1.0']
-if sys.version_info < (3, 4):
-    install_requires.append('enum34')
 
 setup(
     name='fido2',
@@ -52,7 +44,14 @@ setup(
     author_email='dain@yubico.com',
     description='Python based FIDO 2.0 library',
     url='https://github.com/Yubico/python-fido2',
-    install_requires=install_requires,
+    python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    install_requires=[
+        'six',
+        'cryptography>=1.0',
+    ],
+    extras_require={
+        ':python_version < "3.4"': ['enum34']
+    },
     test_suite='test',
     tests_require=['mock>=1.0.1', 'pyfakefs>=2.4'],
     classifiers=[
